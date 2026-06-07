@@ -1,0 +1,527 @@
+{
+  "name": "OCR Extraction v3",
+  "nodes": [
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        464
+      ],
+      "id": "732e55a8-602f-483c-b266-21270eb0f51c",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=Your file <b>{{ $('Telegram Trigger').item.json.message.document.file_name }}</b> is ready.\nKindly check the link: <a href=\"{{ $('Create spreadsheet').item.json.spreadsheetUrl }}\">Open Spreadsheet</a>\n",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        464
+      ],
+      "id": "2f229ac2-eb62-4f16-9f2c-89b6433c4230",
+      "name": "Status Msg",
+      "webhookId": "9758e2fc-8510-4b13-ba4d-da619f4a1bf8",
+      "credentials": {
+        "telegramApi": {
+          "id": "wwE6atW04LvQdyw7",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-1.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-1.5-flash"
+        },
+        "text": "Given the image of a receipt having multiple values and records, extract the data and give the output in a clean and structured json. Output should have all headers, list of items inside distribution of daily or shift hours, receipt number, and so on...  In the output, club all the items under 'item accounting for daily activities' using comma. Similarly club all the names of helpers extracted using comma.",
+        "inputType": "binary",
+        "binaryPropertyName": "=data",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        192,
+        464
+      ],
+      "id": "12d6bfee-d21e-4153-a084-cefbef72f082",
+      "name": "Analyze document",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "pgvyD2cMyujoIXcT",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function/Code node - simple explode of $input.first().json.shift_hours\ntry {\n  // read shift_hours from the first input item\n  const shift = (items[0] && items[0].json && $input.first().json.shift_hours) || [];\n\n  if (!Array.isArray(shift)) {\n    throw new Error('shift_hours is not an array at items[0].json.shift_hours');\n  }\n\n  if (shift.length === 0) {\n    // return an empty result (or an error item if you prefer)\n    return [{ json: { error: 'shift_hours is empty' } }];\n  }\n\n  // return one n8n item per shift entry (includes an optional _index)\n  return shift.map((entry, idx) => ({\n    json: { ...entry, _index: idx }\n  }));\n} catch (err) {\n  return [{ json: { error: true, message: err.message } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        368
+      ],
+      "id": "e7746b55-9890-447f-9e42-894001525b33",
+      "name": "Shift hours format"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function/Code node - flatten details into items\ntry {\n  const details = $input.first().json.details;\n\n  if (!details || typeof details !== 'object') {\n    throw new Error('details not found at items[0].json.details');\n  }\n\n  // Helper: normalize a value into a string\n  function normalize(val) {\n    if (val === null || val === undefined) return '';\n    if (Array.isArray(val)) {\n      return val.map(v => normalize(v)).join(', ');\n    }\n    if (typeof val === 'object') {\n      return Object.values(val)\n        .map(v => normalize(v))\n        .filter(v => v !== '')\n        .join(', ');\n    }\n    if (typeof val === 'string') {\n      return val.replace(/\\n/g, ', ').trim();\n    }\n    return String(val);\n  }\n\n  // Build output items\n  const output = Object.entries(details).map(([key, value], idx) => ({\n    json: {\n      key,\n      value: normalize(value),\n      _index: idx\n    }\n  }));\n\n  return output;\n} catch (err) {\n  return [{ json: { error: true, message: err.message } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        560
+      ],
+      "id": "34c51560-a08e-47de-9e31-7f2008a358a9",
+      "name": "Details Format"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Create spreadsheet').item.json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Create spreadsheet').item.json.sheets[1].properties.sheetId }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timeromo",
+              "displayName": "timeromo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hole",
+              "displayName": "hole",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "metersrom",
+              "displayName": "metersrom",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "meterso",
+              "displayName": "meterso",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "consumables",
+              "displayName": "consumables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "_index",
+              "displayName": "_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1088,
+        368
+      ],
+      "id": "d134863f-73e0-491a-9d2e-5e0bef8a9bd8",
+      "name": "Append row in sheet 2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XZgZgFAxpXphro5I",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1312,
+        464
+      ],
+      "id": "7a60127a-9637-4eb0-93e3-2bf509adaec8",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simple transform for n8n: reads from items[0].json.content.parts[0].text\n// function camelCaseKey(k) {\n//   return String(k || '')\n//     .toLowerCase()\n//     .replace(/[^a-z0-9]+([a-z0-9])/g, (_, c) => c.toUpperCase())\n//     .replace(/[^a-z0-9]/g, '');\n// }\n\nfunction parseMaybeText(s) {\n  if (typeof s === 'object' && s !== null) return s;\n  if (typeof s !== 'string') throw new Error('Input not found or wrong type');\n  const first = s.indexOf('{');\n  const last = s.lastIndexOf('}');\n  const jsonText = first >= 0 && last >= 0 ? s.slice(first, last + 1) : s;\n  return JSON.parse(jsonText);\n}\n\ntry {\n  const rawText = $('Analyze document').first().json.content.parts[0].text;\n  const parsed = parseMaybeText(rawText);\n\n  const shiftKey = Object.keys(parsed).find(k => /distribution_of_daily_and_or_shift_hours/i.test(k));\n  const shift_hours = shiftKey && Array.isArray(parsed[shiftKey])\n    ? parsed[shiftKey].map(obj => {\n        const out = {};\n        for (const [k, v] of Object.entries(obj || {})) out[k] = v === '' ? null : v;\n      // out[camelCaseKey(k)]\n        return out;\n      })\n    : [];\n\n  const details = {};\n  for (const [k, v] of Object.entries(parsed)) {\n    if (k === shiftKey) continue;\n    details[k] = v;\n    // details[camelCaseKey(k)]\n  }\n\n  return [{ json: { shift_hours, details } }];\n} catch (err) {\n  return [{ json: { error: true, message: err.message } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        464
+      ],
+      "id": "c0a256dd-5634-4e32-bdf6-34fc69ce13a4",
+      "name": "Cleaning Data"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -256,
+        464
+      ],
+      "id": "f788fefa-7a4f-4df4-bb09-9edc4f51584f",
+      "name": "Telegram Trigger",
+      "webhookId": "363f2641-dc01-4a0a-9544-5bf8d7a770f2",
+      "credentials": {
+        "telegramApi": {
+          "id": "wwE6atW04LvQdyw7",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.document.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -32,
+        464
+      ],
+      "id": "7d3b6a78-76d4-4a46-b7c3-d0b68fcaf6a0",
+      "name": "Get a file",
+      "webhookId": "e99426e4-dc86-41a2-bd83-c79d4582c6e8",
+      "credentials": {
+        "telegramApi": {
+          "id": "wwE6atW04LvQdyw7",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "title": "={{ $('Telegram Trigger').item.json.message.document.file_name }}",
+        "sheetsUi": {
+          "sheetValues": [
+            {
+              "title": "Sheet1"
+            },
+            {
+              "title": "Sheet2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        400,
+        464
+      ],
+      "id": "dc6cbf00-b6e2-4083-9a33-e73e926d077c",
+      "name": "Create spreadsheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XZgZgFAxpXphro5I",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Create spreadsheet').item.json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Create spreadsheet').item.json.sheets[0].properties.sheetId }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "_index",
+              "displayName": "_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1088,
+        560
+      ],
+      "id": "576f33a2-d3e1-4be6-968b-eeb680d3057a",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XZgZgFAxpXphro5I",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Status Msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze document": {
+      "main": [
+        [
+          {
+            "node": "Create spreadsheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shift hours format": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Details Format": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet 2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleaning Data": {
+      "main": [
+        [
+          {
+            "node": "Shift hours format",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Details Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Analyze document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Cleaning Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "636dd35b-0d32-43fd-8cee-6b2c524d7b96",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c4a289bb9ffb365bc156dd41d8348243dcc91fda5a6616fe37336c3cbfd63874"
+  },
+  "id": "o7IM2dGzWRzsDYHs",
+  "tags": []
+}
